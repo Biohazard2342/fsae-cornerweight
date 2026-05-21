@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FSAE 코너웨이트</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #15191f;
+    --panel-2: #1c2128;
+    --line: #2a313a;
+    --fg: #e6e9ee;
+    --muted: #8b95a3;
+    --accent: #ffb020;
+    --stale: #6a727d;
+    --car-body: #2a313a;
+    --car-edge: #4a525d;
+    --tire: #0e1116;
+    --tire-edge: #3a414b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
+    font-family: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, monospace; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+  .hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 6px; }
+  .hdr .title { display: flex; align-items: center; gap: 12px; }
+  .hdr h1 { margin: 0; font-size: 18px; letter-spacing: 1px; }
+  .hdr .logo { height: 40px; width: 40px; object-fit: contain;
+    background: #fff; border-radius: 50%; padding: 2px; }
+  .hdr .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    border: 1px solid var(--line); color: var(--muted); vertical-align: middle; }
+  .status.live { color: #2ecc71; border-color: #2ecc71; }
+  .status.down { color: #e74c3c; border-color: #e74c3c; }
+
+  /* 차량 top-down 레이아웃
+     Row 1: [FRONT 라벨 전체]
+     Row 2: [FL | 차 SVG (2행 span) | FR]
+     Row 3: [RL |                  | RR]
+     Row 4: [REAR 라벨 전체] */
+  .car-layout {
+    display: grid;
+    grid-template-columns: 1fr 240px 1fr;
+    grid-template-rows: auto 1fr 1fr auto;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .front-label, .rear-label {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 3px;
+  }
+  .front-label { grid-row: 1; }
+  .rear-label  { grid-row: 4; }
+  .front-label::before { content: "▲ "; color: var(--accent); }
+  .rear-label::after  { content: " ▼"; color: var(--muted); }
+
+  .car-svg { grid-column: 2; grid-row: 2 / span 2;
+    display: flex; align-items: center; justify-content: center; }
+  .car-svg svg { width: 100%; height: auto; max-height: 360px; }
+
+  .corner { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; min-height: 130px; position: relative; }
+  .corner .pos { color: var(--muted); font-size: 11px; letter-spacing: 2px; }
+  .corner .pos b { color: var(--fg); font-weight: 600; margin-right: 8px; letter-spacing: 1px; }
+  .corner .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--stale); margin-right: 7px; vertical-align: middle; transition: background 0.2s; }
+  .corner:not(.stale) .dot { background: #2ecc71; box-shadow: 0 0 6px rgba(46,204,113,0.6); }
+  .corner .weight { font-size: 38px; font-weight: 600; margin-top: 4px; line-height: 1.1; }
+  .corner .unit { font-size: 15px; color: var(--muted); margin-left: 6px; }
+  .corner .meta { color: var(--muted); font-size: 11px; margin-top: 8px; line-height: 1.5; }
+  .corner .meta .k { display: inline-block; min-width: 70px; }
+  .corner.stale .weight { color: var(--stale); }
+  .corner.stale .pos b { color: var(--stale); }
+  .corner.suggest { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.25); }
+  .corner.suggest .pos b { color: var(--accent); }
+
+  .c-FL { grid-column: 1; grid-row: 2; }
+  .c-FR { grid-column: 3; grid-row: 2; }
+  .c-RL { grid-column: 1; grid-row: 3; }
+  .c-RR { grid-column: 3; grid-row: 3; }
+
+  .summary { margin-top: 22px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 18px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .summary .item .k { color: var(--muted); font-size: 11px; letter-spacing: 1px; }
+  .summary .item .v { font-size: 20px; font-weight: 600; }
+
+  .settings { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 18px; }
+  .settings summary { cursor: pointer; color: var(--muted); font-size: 12px;
+    letter-spacing: 1px; padding: 4px 0; user-select: none; list-style: none; }
+  .settings summary::before { content: "▸ "; }
+  .settings[open] summary::before { content: "▾ "; }
+  .settings[open] summary { color: var(--fg); }
+  .settings-body { display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .settings-body label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .settings-body label span { color: var(--muted); min-width: 50px; }
+  .settings-body input { background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+    padding: 4px 8px; border-radius: 6px; width: 70px; font: inherit; text-align: right; }
+  .settings-body input:focus { outline: none; border-color: var(--accent); }
+  .settings-body label em { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 4px; }
+  .settings-body button { background: transparent; border: 1px solid var(--line); color: var(--muted);
+    padding: 4px 12px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; }
+  .settings-body button:hover { color: var(--fg); border-color: var(--muted); }
+  .settings-note { width: 100%; margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  .guide { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+  .guide .icon { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .guide .icon.ok    { background: rgba(46,204,113,0.15); color: #2ecc71; }
+  .guide .icon.warn  { background: rgba(255,176,32,0.15); color: var(--accent); }
+  .guide .icon.idle  { background: rgba(139,149,163,0.12); color: var(--muted); }
+  .guide .text { font-size: 14px; }
+  .guide .text .hint { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  .glossary { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 18px; }
+  .glossary summary { cursor: pointer; color: var(--muted); font-size: 12px;
+    letter-spacing: 1px; padding: 4px 0; user-select: none; list-style: none; }
+  .glossary summary::before { content: "▸ "; }
+  .glossary[open] summary::before { content: "▾ "; }
+  .glossary[open] summary { color: var(--fg); }
+  .glossary dl { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: 150px 1fr; gap: 10px 18px; font-size: 13px; }
+  .glossary dt { color: var(--accent); font-weight: 600; }
+  .glossary dd { margin: 0; color: var(--fg); line-height: 1.55; }
+  .glossary dd small { color: var(--muted); display: block; margin-top: 2px; }
+
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 11px; text-align: center; letter-spacing: 1px; }
+  .footer b { color: var(--fg); font-weight: 600; }
+
+  /* 태블릿 폭에서는 차 그림 폭만 줄임 */
+  @media (max-width: 820px) {
+    .car-layout { grid-template-columns: 1fr 180px 1fr; }
+    .corner .weight { font-size: 32px; }
+  }
+
+  /* 모바일: 차 그림을 위에 가로로 한 번 두고, 4코너는 2x2 그리드 */
+  @media (max-width: 600px) {
+    .wrap { padding: 14px; }
+    .hdr h1 { font-size: 16px; }
+    .hdr .logo { height: 34px; width: 34px; }
+    .status { font-size: 10px; padding: 2px 6px; }
+
+    .car-layout {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto auto auto auto;
+      gap: 8px;
+    }
+    .front-label { grid-column: 1 / -1; grid-row: 1; }
+    .car-svg     { grid-column: 1 / -1; grid-row: 2; }
+    .car-svg svg { max-height: 180px; }
+    .c-FL { grid-column: 1; grid-row: 3; }
+    .c-FR { grid-column: 2; grid-row: 3; }
+    .c-RL { grid-column: 1; grid-row: 4; }
+    .c-RR { grid-column: 2; grid-row: 4; }
+    .rear-label  { grid-column: 1 / -1; grid-row: 5; }
+
+    .corner { padding: 12px 14px; min-height: 0; }
+    .corner .weight { font-size: 30px; margin-top: 2px; }
+    .corner .meta { font-size: 10px; margin-top: 6px; }
+    .corner .meta .k { min-width: 56px; }
+
+    .summary { grid-template-columns: repeat(2, 1fr); padding: 12px 14px; }
+    .summary .item .v { font-size: 17px; }
+
+    .settings-body { gap: 10px; }
+    .settings-body label { width: 100%; }
+    .settings-body input { width: 80px; margin-left: auto; }
+    .settings-body button { width: 100%; }
+    .settings-note { font-size: 10.5px; }
+
+    .guide { padding: 12px 14px; gap: 10px; }
+    .guide .text { font-size: 13px; }
+    .guide .text .hint { font-size: 10.5px; }
+
+    .glossary dl { grid-template-columns: 1fr; gap: 2px 0; font-size: 12.5px; }
+    .glossary dt { margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hdr">
+    <div class="title">
+      <img src="/static/logo.png" alt="두원공과대학교" class="logo">
+      <h1>FSAE 코너웨이트</h1>
+    </div>
+    <div class="badges">
+      <span id="status" class="status down">브라우저: 끊김</span>
+      <span id="esp32" class="status down">ESP32: --</span>
+      <span id="ble" class="status down">BLE 체중계 --</span>
+      <span id="viewers" class="status">접속자 --</span>
+    </div>
+  </header>
+  <div class="sub">마지막 업데이트 <span id="lastUpdate">-</span></div>
+
+  <div class="car-layout">
+    <div class="front-label">FRONT · 앞</div>
+
+    <div class="corner c-FL" id="c-FL">
+      <div class="pos"><span class="dot"></span><b>FL</b>앞 왼쪽</div>
+      <div class="weight"><span class="v">--</span><span class="unit">kg</span></div>
+      <div class="meta">
+        <div><span class="k">신호강도</span><span class="rssi">--</span></div>
+        <div><span class="k">최근수신</span><span class="age">--</span></div>
+      </div>
+    </div>
+
+    <div class="car-svg">
+      <!-- 위에서 본 차량 실루엣. 좌측이 앞-왼쪽, 우측이 앞-오른쪽 -->
+      <svg viewBox="0 0 220 360" xmlns="http://www.w3.org/2000/svg">
+        <!-- 차체 (위가 앞) -->
+        <rect x="40" y="20" width="140" height="320" rx="34" ry="34"
+              fill="var(--car-body)" stroke="var(--car-edge)" stroke-width="2"/>
+        <!-- 윈드실드 (앞) -->
+        <path d="M 60 70 Q 110 50 160 70 L 150 110 Q 110 100 70 110 Z"
+              fill="#0e1116" stroke="var(--car-edge)" stroke-width="1.2"/>
+        <!-- 리어 윈도우 (뒤) -->
+        <path d="M 65 270 Q 110 280 155 270 L 150 305 Q 110 315 70 305 Z"
+              fill="#0e1116" stroke="var(--car-edge)" stroke-width="1.2"/>
+        <!-- 중앙 분할선 (모노코크 느낌) -->
+        <line x1="110" y1="120" x2="110" y2="260" stroke="var(--car-edge)" stroke-width="1" stroke-dasharray="3 4"/>
+        <!-- 4 바퀴 -->
+        <rect x="14" y="50"  width="26" height="56" rx="6" fill="var(--tire)" stroke="var(--tire-edge)"/>
+        <rect x="180" y="50" width="26" height="56" rx="6" fill="var(--tire)" stroke="var(--tire-edge)"/>
+        <rect x="14" y="254" width="26" height="56" rx="6" fill="var(--tire)" stroke="var(--tire-edge)"/>
+        <rect x="180" y="254" width="26" height="56" rx="6" fill="var(--tire)" stroke="var(--tire-edge)"/>
+        <!-- 진행 방향 화살표 -->
+        <polygon points="110,4 100,18 120,18" fill="var(--accent)"/>
+      </svg>
+    </div>
+
+    <div class="corner c-FR" id="c-FR">
+      <div class="pos"><span class="dot"></span><b>FR</b>앞 오른쪽</div>
+      <div class="weight"><span class="v">--</span><span class="unit">kg</span></div>
+      <div class="meta">
+        <div><span class="k">신호강도</span><span class="rssi">--</span></div>
+        <div><span class="k">최근수신</span><span class="age">--</span></div>
+      </div>
+    </div>
+
+    <div class="corner c-RL" id="c-RL">
+      <div class="pos"><span class="dot"></span><b>RL</b>뒤 왼쪽</div>
+      <div class="weight"><span class="v">--</span><span class="unit">kg</span></div>
+      <div class="meta">
+        <div><span class="k">신호강도</span><span class="rssi">--</span></div>
+        <div><span class="k">최근수신</span><span class="age">--</span></div>
+      </div>
+    </div>
+
+    <div class="corner c-RR" id="c-RR">
+      <div class="pos"><span class="dot"></span><b>RR</b>뒤 오른쪽</div>
+      <div class="weight"><span class="v">--</span><span class="unit">kg</span></div>
+      <div class="meta">
+        <div><span class="k">신호강도</span><span class="rssi">--</span></div>
+        <div><span class="k">최근수신</span><span class="age">--</span></div>
+      </div>
+    </div>
+
+    <div class="rear-label">REAR · 뒤</div>
+  </div>
+
+  <div class="summary">
+    <div class="item"><div class="k">총 무게</div><div class="v" id="s-total">-- kg</div></div>
+    <div class="item"><div class="k">앞 비율</div><div class="v" id="s-front">--</div></div>
+    <div class="item"><div class="k">좌 비율</div><div class="v" id="s-left">--</div></div>
+    <div class="item"><div class="k">크로스 (FL+RR)</div><div class="v" id="s-cross">--</div></div>
+  </div>
+
+  <details class="settings" id="settings">
+    <summary>목표값 설정 (앞 비율, 좌 비율, 크로스)</summary>
+    <div class="settings-body">
+      <label><span>앞 비율</span><input type="number" id="t-front" step="0.5" min="1" max="99"> % <em id="t-front-rear">(뒤 50%)</em></label>
+      <label><span>좌 비율</span><input type="number" id="t-left"  step="0.5" min="1" max="99"> % <em id="t-left-right">(우 50%)</em></label>
+      <label><span>크로스</span><input type="number" id="t-cross" step="0.5" min="1" max="99"> %</label>
+      <button id="t-reset">기본값 50 / 50 / 50</button>
+      <div class="settings-note">
+        ※ 앞뒤 비율은 라이드하이트 조정으로는 못 바꿉니다 (부품 배치로 결정). 정보로만 표시되고 가이드에서는 액션을 제안하지 않습니다.
+        좌우·크로스는 스프링 퍼치(라이드하이트)로 조정 가능. 입력은 1~99% 범위에서 자동 보정됩니다.
+      </div>
+    </div>
+  </details>
+
+  <div class="guide" id="guide">
+    <div class="icon idle" id="guide-icon">·</div>
+    <div class="text">
+      <div id="guide-msg">4코너 데이터 수신 대기 중...</div>
+      <div class="hint" id="guide-hint">코너웨이트 균형 조정 가이드</div>
+    </div>
+  </div>
+
+  <details class="glossary">
+    <summary>용어 설명</summary>
+    <dl>
+      <dt>코너웨이트</dt>
+      <dd>차량의 4개 바퀴가 각각 지면에 가하는 수직 하중(kg). 좌우·앞뒤·대각선 균형이 코너링 응답을 결정.</dd>
+
+      <dt>FL / FR / RL / RR</dt>
+      <dd>Front-Left, Front-Right, Rear-Left, Rear-Right.
+        <small>운전석에서 차 앞을 본 기준 — 그림의 ▲ 화살표가 진행 방향.</small></dd>
+
+      <dt>총 무게</dt>
+      <dd>네 바퀴 합. 드라이버 탑승·연료 풀충전 등 측정 조건 통일이 중요.</dd>
+
+      <dt>앞 비율</dt>
+      <dd>(FL+FR) / 총무게 × 100. 앞 차축이 분담하는 비율.
+        <small>보통 FSAE는 45~50%. 라이드하이트로는 못 바꾸고 부품 배치로 결정됨.</small></dd>
+
+      <dt>좌 비율</dt>
+      <dd>(FL+RL) / 총무게 × 100. 좌측이 분담하는 비율. 목표 50%.
+        <small>좌우 코너의 라이드하이트(스프링 퍼치)로 조정 가능.</small></dd>
+
+      <dt>크로스 (FL+RR)</dt>
+      <dd>(FL+RR) / 총무게 × 100. 대각선 한 쌍의 무게 비율. 목표 50%.
+        <small>50%에서 벗어나면 좌·우 코너링 응답이 비대칭. 가장 우선해서 맞추는 값.</small></dd>
+
+      <dt>라이드 하이트 조정</dt>
+      <dd>한 코너의 스프링 퍼치를 <b>높이면</b> 그 코너 + <b>대각선 반대 코너</b>의 하중이 증가하고, 나머지 두 코너는 감소.
+        <small>강체 섀시 4점 지지 원리 — 한 다리를 길게 만들면 그 다리와 대각선 다리가 더 강하게 눌림.</small></dd>
+
+      <dt>신호 강도 (RSSI)</dt>
+      <dd>체중계의 BLE 광고 패킷 수신 세기 (dBm). 절대값 작을수록 강함 (–50이 –70보다 강함).
+        <small>–80 이하로 떨어지면 패킷 손실 가능 — ESP32 위치를 차 중앙 가까이로.</small></dd>
+
+      <dt>BLE 광고 (Advertisement)</dt>
+      <dd>BLE 기기가 연결 없이 일방향으로 뿌리는 짧은 패킷. 다이소 체중계는 4ms 간격으로 측정값을 광고.
+        <small>ESP32는 연결 없이 4개 체중계의 광고를 동시에 스캔.</small></dd>
+    </dl>
+  </details>
+
+  <footer class="footer">Designed &amp; built by <b>이윤재</b></footer>
+</div>
+
+<script>
+const corners = ["FL", "FR", "RL", "RR"];
+const state = {};
+const STALE_MS = 2000;
+const ESP32_STALE_MS = 2000;
+let ingest = { connected: 0, last_ms: null };
+let viewers = 0;
+
+function fmt(n, digits = 1) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "--";
+  return Number(n).toFixed(digits);
+}
+function fmtAge(ms) {
+  if (ms == null) return "--";
+  if (ms < 1000) return ms + " ms";
+  return (ms / 1000).toFixed(1) + " s";
+}
+
+const CROSS_TOL = 1.0;       // %p tolerance for cross-weight guide
+const LEFT_TOL  = 1.0;       // %p tolerance for left/right guide
+const FRONT_INFO_TOL = 2.0;  // %p before front/rear info nag (no action possible)
+
+const DEFAULT_TARGETS = { front: 50, left: 50, cross: 50 };
+const targets = (function() {
+  try { return Object.assign({}, DEFAULT_TARGETS, JSON.parse(localStorage.getItem("cw_targets") || "{}")); }
+  catch { return { ...DEFAULT_TARGETS }; }
+})();
+
+function saveTargets() { localStorage.setItem("cw_targets", JSON.stringify(targets)); }
+const clampPct = (v) => Math.max(1, Math.min(99, v));
+
+function refreshTargetHints() {
+  document.getElementById("t-front-rear").textContent  = `(뒤 ${(100 - targets.front).toFixed(1)}%)`;
+  document.getElementById("t-left-right").textContent  = `(우 ${(100 - targets.left).toFixed(1)}%)`;
+}
+
+function bindTargetInputs() {
+  for (const k of ["front", "left", "cross"]) {
+    const el = document.getElementById("t-" + k);
+    el.value = targets[k];
+    el.addEventListener("change", () => {
+      const v = parseFloat(el.value);
+      if (!Number.isNaN(v)) {
+        targets[k] = clampPct(v);
+        el.value = targets[k];      // reflect clamped value back into the input
+        saveTargets();
+        refreshTargetHints();
+        render();
+      } else {
+        el.value = targets[k];      // revert bad input
+      }
+    });
+  }
+  document.getElementById("t-reset").addEventListener("click", () => {
+    Object.assign(targets, DEFAULT_TARGETS);
+    document.getElementById("t-front").value = targets.front;
+    document.getElementById("t-left").value  = targets.left;
+    document.getElementById("t-cross").value = targets.cross;
+    saveTargets();
+    refreshTargetHints();
+    render();
+  });
+  refreshTargetHints();
+}
+bindTargetInputs();
+
+const KO_CORNER = { FL: "앞 왼쪽", FR: "앞 오른쪽", RL: "뒤 왼쪽", RR: "뒤 오른쪽" };
+const signed = (n) => (n >= 0 ? "+" : "") + n.toFixed(2);
+
+function computeGuide(fl, fr, rl, rr, total) {
+  const cross = (fl + rr) / total * 100;
+  const left  = (fl + rl) / total * 100;
+  const front = (fl + fr) / total * 100;
+  const dCross = cross - targets.cross;
+  const dLeft  = left  - targets.left;
+  const dFront = front - targets.front;
+  const detail = `크로스 ${cross.toFixed(2)}% (목표 ${targets.cross}, Δ ${signed(dCross)}%p) · `
+               + `좌우 ${left.toFixed(2)}% (목표 ${targets.left}, Δ ${signed(dLeft)}%p) · `
+               + `앞뒤 ${front.toFixed(2)}% (목표 ${targets.front}, Δ ${signed(dFront)}%p)`;
+
+  // 우선순위 1: 크로스
+  if (Math.abs(dCross) > CROSS_TOL) {
+    // dCross > 0: FL+RR 무거움 → FR/RL 대각선 올림
+    // dCross < 0: FR+RL 무거움 → FL/RR 대각선 올림
+    const diag = dCross > 0 ? ["FR", "RL"] : ["FL", "RR"];
+    const pick = (state[diag[0]].weight_kg <= state[diag[1]].weight_kg) ? diag[0] : diag[1];
+    return { level: "warn", target: pick,
+      msg: `크로스 조정 → ${pick} (${KO_CORNER[pick]}) 코너를 약간 높여주세요`,
+      hint: detail };
+  }
+  // 우선순위 2: 좌우
+  if (Math.abs(dLeft) > LEFT_TOL) {
+    // dLeft > 0: 좌측 무거움 → 우측 올림
+    // dLeft < 0: 우측 무거움 → 좌측 올림
+    const side = dLeft > 0 ? ["FR", "RR"] : ["FL", "RL"];
+    const pick = (state[side[0]].weight_kg <= state[side[1]].weight_kg) ? side[0] : side[1];
+    return { level: "warn", target: pick,
+      msg: `좌우 조정 → ${pick} (${KO_CORNER[pick]}) 코너를 약간 높여주세요`,
+      hint: detail };
+  }
+  // 우선순위 3: 앞뒤 (정보만)
+  if (Math.abs(dFront) > FRONT_INFO_TOL) {
+    return { level: "warn", target: null,
+      msg: `앞뒤 분포 편차 ${signed(dFront)}%p — 부품 배치로 조정 필요 (라이드하이트로는 보정 안 됨)`,
+      hint: detail };
+  }
+  return { level: "ok", target: null, msg: "목표 균형 달성", hint: detail };
+}
+
+function renderGuide(guide) {
+  const msgEl  = document.getElementById("guide-msg");
+  const hintEl = document.getElementById("guide-hint");
+  const iconEl = document.getElementById("guide-icon");
+  msgEl.textContent  = guide.msg;
+  hintEl.textContent = guide.hint;
+  iconEl.className = "icon " + (guide.level === "ok" ? "ok" : guide.level === "warn" ? "warn" : "idle");
+  iconEl.textContent = guide.level === "ok" ? "✓" : guide.level === "warn" ? "!" : "·";
+  for (const c of corners) {
+    document.getElementById("c-" + c).classList.toggle("suggest", guide.target === c);
+  }
+}
+
+const hasWeight = (s) => s != null && typeof s.weight_kg === "number" && Number.isFinite(s.weight_kg);
+
+function render() {
+  const now = Date.now();
+  let total = 0, haveAll = true;
+  for (const c of corners) {
+    const el = document.getElementById("c-" + c);
+    const s = state[c];
+    const vEl = el.querySelector(".weight .v");
+    const rssiEl = el.querySelector(".rssi");
+    const ageEl = el.querySelector(".age");
+    if (!s) {
+      vEl.textContent = "--";
+      rssiEl.textContent = "--";
+      ageEl.textContent = "--";
+      el.classList.add("stale");
+      haveAll = false;
+      continue;
+    }
+    vEl.textContent = hasWeight(s) ? fmt(s.weight_kg, 2) : "--";
+    rssiEl.textContent = (s.rssi != null) ? (s.rssi + " dBm") : "--";
+    const age = now - (s.server_ts || now);
+    ageEl.textContent = fmtAge(age);
+    el.classList.toggle("stale", age > STALE_MS);
+    if (hasWeight(s)) {
+      total += s.weight_kg;
+    } else {
+      haveAll = false;  // exclude from summary/guide until real weight arrives
+    }
+  }
+  document.getElementById("lastUpdate").textContent = new Date().toLocaleTimeString();
+  if (haveAll) {
+    const fl = state.FL.weight_kg, fr = state.FR.weight_kg,
+          rl = state.RL.weight_kg, rr = state.RR.weight_kg;
+    const front = (fl + fr) / total * 100;
+    const left  = (fl + rl) / total * 100;
+    const cross = (fl + rr) / total * 100;
+    document.getElementById("s-total").textContent = fmt(total, 2) + " kg";
+    document.getElementById("s-front").textContent = fmt(front, 1) + " %";
+    document.getElementById("s-left").textContent  = fmt(left,  1) + " %";
+    document.getElementById("s-cross").textContent = fmt(cross, 1) + " %";
+    renderGuide(computeGuide(fl, fr, rl, rr, total));
+  } else {
+    renderGuide({ level: "idle", target: null,
+      msg: "4코너 데이터 수신 대기 중...", hint: "코너웨이트 균형 조정 가이드" });
+  }
+}
+
+function setStatus(live) {
+  const el = document.getElementById("status");
+  el.textContent = "브라우저: " + (live ? "연결됨" : "끊김");
+  el.classList.toggle("live", live);
+  el.classList.toggle("down", !live);
+}
+
+function renderViewers() {
+  document.getElementById("viewers").textContent = "접속자 " + viewers + "명";
+}
+
+function renderBle() {
+  const now = Date.now();
+  let live = 0;
+  for (const c of corners) {
+    const s = state[c];
+    if (s && (now - (s.server_ts || 0)) <= STALE_MS) live++;
+  }
+  const el = document.getElementById("ble");
+  el.textContent = `BLE 체중계 ${live}/4`;
+  el.classList.toggle("live", live === 4);
+  el.classList.toggle("down", live === 0);
+}
+
+function renderEsp32() {
+  const el = document.getElementById("esp32");
+  const now = Date.now();
+  const age = ingest.last_ms ? (now - ingest.last_ms) : null;
+  let label, live;
+  if (ingest.connected === 0) {
+    label = "ESP32: 끊김"; live = false;
+  } else if (age === null || age > ESP32_STALE_MS) {
+    label = `ESP32: 연결됨 (데이터 없음 ${age != null ? Math.round(age/1000)+'s' : ''})`; live = false;
+  } else {
+    label = `ESP32: 연결됨 ×${ingest.connected}`; live = true;
+  }
+  el.textContent = label;
+  el.classList.toggle("live", live);
+  el.classList.toggle("down", !live);
+}
+
+let ws = null;
+function connect() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/display`);
+  ws.onopen = () => setStatus(true);
+  ws.onclose = () => { setStatus(false); setTimeout(connect, 1000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "snapshot") {
+      Object.assign(state, msg.data.corners || {});
+      if (msg.data.ingest) ingest = msg.data.ingest;
+      if (msg.data.display) viewers = msg.data.display.count;
+    } else if (msg.type === "sample") {
+      state[msg.data.corner] = msg.data;
+      ingest.last_ms = msg.data.server_ts;
+    } else if (msg.type === "ingest_status") {
+      ingest = msg.data;
+    } else if (msg.type === "display_status") {
+      viewers = msg.data.count;
+    }
+    render();
+    renderEsp32();
+    renderViewers();
+    renderBle();
+  };
+}
+connect();
+setInterval(() => { render(); renderEsp32(); renderBle(); }, 500);
+</script>
+</body>
+</html>

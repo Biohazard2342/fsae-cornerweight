@@ -1,0 +1,18 @@
+# Default: auto-detect text and normalize on commit
+* text=auto
+
+# Always LF for scripts/configs that run on Linux (RPi)
+*.sh         text eol=lf
+*.py         text eol=lf
+*.service    text eol=lf
+*.cpp        text eol=lf
+*.h          text eol=lf
+*.ini        text eol=lf
+*.html       text eol=lf
+*.md         text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
+
+# Binary
+*.png        binary
+*.jpg        binary

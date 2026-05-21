@@ -1,0 +1,20 @@
+[Unit]
+Description=FSAE Corner Weight - FastAPI WebSocket server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yunjae
+Group=yunjae
+WorkingDirectory=/home/yunjae/cornerweight
+ExecStart=/home/yunjae/cornerweight/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+# logging — stdout/stderr captured by journald
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

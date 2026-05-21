@@ -1,0 +1,19 @@
+[Unit]
+Description=FSAE Corner Weight - ESP32 Serial bridge
+After=cornerweight-server.service
+Requires=cornerweight-server.service
+
+[Service]
+Type=simple
+User=yunjae
+Group=yunjae
+WorkingDirectory=/home/yunjae/cornerweight
+ExecStart=/home/yunjae/cornerweight/.venv/bin/python /home/yunjae/cornerweight/bridge/serial_bridge.py
+Restart=always
+RestartSec=3
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

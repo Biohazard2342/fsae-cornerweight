@@ -1,0 +1,19 @@
+.pio/
+.vscode/
+.DS_Store
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs
+*.log
+
+# Local OS / editor
+Thumbs.db
+.idea/
+.claude/
+
+
