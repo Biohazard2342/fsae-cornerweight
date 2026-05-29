@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from typing import Union
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,7 +35,8 @@ class Sample(BaseModel):
     weight_kg: Optional[float] = None
     mac: Optional[str] = None
     rssi: Optional[int] = None
-    raw: Optional[str] = None
+    # raw is hex string in BLE firmware, plain int in HX711 firmware — accept either
+    raw: Optional[Union[str, int]] = None
     ts_ms: Optional[int] = None
 
 

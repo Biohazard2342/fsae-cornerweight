@@ -24,9 +24,11 @@
 #include <Preferences.h>
 #include <math.h>
 
-// HX711 wiring (ESP32-S3 GPIO; change here if you route differently)
-static constexpr int kDoutPin = 4;   // HX711 DOUT
-static constexpr int kSckPin  = 5;   // HX711 PD_SCK
+// HX711 wiring. Uses Arduino Nano ESP32 board labels (D4, D5), which the
+// Arduino core maps to ESP32-S3 GPIO 7 and GPIO 8 respectively. Don't write
+// raw `4`/`5` here — those are different silicon GPIOs.
+static constexpr int kDoutPin = D4;   // HX711 DT  (board label "D4" → GPIO 7)
+static constexpr int kSckPin  = D5;   // HX711 SCK (board label "D5" → GPIO 8)
 
 static constexpr uint32_t kSamplePeriodMs = 100;   // 10 Hz output
 static constexpr int      kSampleAvg      = 3;     // running average per sample
